@@ -1,7 +1,7 @@
 import os
 from fastapi import FastAPI
 from pydantic import BaseModel
-import base64
+import requests
 from PIL import Image
 import io
 import numpy as np
@@ -10,8 +10,11 @@ import uvicorn
 import torch
 from torchvision.models import resnet50, ResNet50_Weights
 
+from metrics import router as metrics_router
+
 
 app = FastAPI(title="ResNet50 Image Classification API")
+app.include_router(metrics_router)
 
 class ImageRequest(BaseModel):
     data: str  # Base64 encoded image
@@ -26,8 +29,11 @@ resnet_model.eval()
 @app.post("/infer")
 async def infer(request: ImageRequest):
     t = time.perf_counter()
-    decoded = base64.b64decode(request.data)
-    inp = Image.open(io.BytesIO(decoded))
+    # decoded = base64.b64decode(request.data)
+    # inp = Image.open(io.BytesIO(decoded))
+    response = requests.get(request.data)
+    response.raise_for_status()
+    inp = Image.open(io.BytesIO(response.content)).convert("RGB")
     inp = np.array(preprocessor(inp))
     inp = torch.from_numpy(np.array([inp]))
     

@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+pillow
+torch
+torchvision
+numpy
+requests
+prometheus-client

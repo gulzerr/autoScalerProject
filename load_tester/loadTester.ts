@@ -3,9 +3,9 @@ import axios from "axios";
 import sharp from "sharp";
 import { saveLatencyHistogram } from "./chart";
 
-const TARGET_URL = "http://localhost:9999/infer";
+const TARGET_URL = "http://127.0.0.1:52311/infer";
 const IMAGE_PATH = path.join(__dirname, "berlin.jpg");
-const NUM_REQUESTS = 1000;
+const NUM_REQUESTS = 40;
 const CONCURRENCY = 20;
 
 async function encodeImageToBase64(imagePath: string): Promise<string> {
@@ -20,13 +20,20 @@ interface RequestResult {
   error?: string;
 }
 
+let responseTimeStamp: number[] = [];
+let start: number;
+
 async function sendRequest(base64Image: string): Promise<RequestResult> {
-  const payload = { data: base64Image };
-  const start = Date.now();
   try {
+    const payload = { data: base64Image };
+    responseTimeStamp.length === 0 ? (start = Date.now()) : null;
     const response = await axios.post(TARGET_URL, payload, { timeout: 10000 });
-    const latency = Date.now() - start;
-    // console.log("🚀 ~ sendRequest ~ Date.now():", Date.now());
+    responseTimeStamp.push(Date.now());
+    const latency =
+      responseTimeStamp.length === 1
+        ? Date.now() - start
+        : Date.now() - responseTimeStamp[responseTimeStamp.length - 2];
+    console.log("🚀 ~ sendRequest ~ latency:", latency);
     return { success: response.status === 200, latency, data: response.data };
   } catch (err: any) {
     return { success: false, latency: null, error: err.message };
@@ -35,6 +42,8 @@ async function sendRequest(base64Image: string): Promise<RequestResult> {
 
 async function runLoadTest(): Promise<void> {
   const base64Image = await encodeImageToBase64(IMAGE_PATH);
+  const url =
+    "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR_yHO01kdWo3NTUR6J-U6uIN8H2pbkGjdbGg&s";
   let successCount = 0;
   let failureCount = 0;
   let latencies: number[] = [];
@@ -45,7 +54,7 @@ async function runLoadTest(): Promise<void> {
     const batchSize = Math.min(CONCURRENCY, NUM_REQUESTS - i * CONCURRENCY);
     const promises: Promise<RequestResult>[] = [];
     for (let j = 0; j < batchSize; j++) {
-      promises.push(sendRequest(base64Image));
+      promises.push(sendRequest(url));
     }
     const results = await Promise.all(promises);
     for (const result of results) {
@@ -74,12 +83,12 @@ async function runLoadTest(): Promise<void> {
     const min = Math.min(...latencies);
     const max = Math.max(...latencies);
     latencies.sort((a, b) => a - b);
-    const p95 = latencies[Math.floor(latencies.length * 0.95)];
+    const p95 = latencies[Math.floor(latencies.length * 0.99)];
     console.log(`Average Latency: ${avg.toFixed(2)} ms`);
     console.log(`Min Latency: ${min} ms`);
     console.log(`Max Latency: ${max} ms`);
-    console.log(`95th Percentile: ${p95} ms`);
-    await saveLatencyHistogram(latencies, "latency_distribution.png");
+    console.log(`99th Percentile: ${p95} ms`);
+    await saveLatencyHistogram(latencies, avg, "latency_distribution.png");
   }
 }
 

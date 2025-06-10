@@ -1,0 +1,13 @@
+config:
+  target: "http://localhost:9999"
+  phases:
+    - duration: 30
+      arrivalRate: 10
+      rampTo: 100
+scenarios:
+  - name: "Trigger autoscaler"
+    flow:
+      - post:
+          url: "/infer"
+          json:
+            data: "https://cdn.britannica.com/39/6839-050-27891400/Brandenburg-Gate-Berlin.jpg"
