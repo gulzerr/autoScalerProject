@@ -104,7 +104,7 @@ export async function saveLatencyHistogram(opts: {
         },
         title: {
           display: true,
-          text: "Request Latency Distribution",
+          text: "Request Latency Distribution at 90 hpa",
           font: {
             size: 16,
           },

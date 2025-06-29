@@ -1,4 +1,4 @@
 export const PORT = {
-  dispatcher: 52824,
+  dispatcher: 51157,
   inferer: 51435,
 };

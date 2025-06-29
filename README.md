@@ -304,23 +304,17 @@ GET  /metrics               # Prometheus metrics
 ### Accessing Dashboards
 
 **Grafana Dashboard:**
+user: admin
 
 ```bash
-kubectl port-forward svc/inference-metrics-grafana 3000:80
-# Access: http://localhost:3000
-# Credentials: admin/admin
-```
-
-**Prometheus:**
-
-```bash
-kubectl port-forward svc/inference-metrics-prometheus-server 9090:80
-# Access: http://localhost:9090
+minikube service inference-metrics-grafana
+# for accessing password
+kubectl get secret inference-metrics-grafana -o jsonpath="{.data.admin-password}" | base64 --decode ; echo
 ```
 
 ### Key Metrics to Monitor
 
-- **CPU Utilization**: Target > 70% triggers scaling
+- **CPU Utilization**: Target > 70% and 90% triggers scaling
 - **Request Latency**: End-to-end response times
 - **Queue Length**: Dispatcher queue size
 - **Pod Count**: Number of active inference pods
@@ -353,8 +347,7 @@ queueType: Array (in-memory)
 
 ```typescript
 // Default settings
-imageFormats: [".JPEG", ".jpg", ".png"];
-reportFormat: "PNG plot + JSON stats";
+imageFormats: ".png";
 ```
 
 ## 🐛 Troubleshooting
@@ -375,7 +368,7 @@ kubectl describe deployment ml-inference
 
 ```bash
 # Check HPA status
-kubectl describe hpa ml-inference-hpa
+kubectl get hpa
 
 # Verify CPU load
 kubectl top pods
@@ -385,12 +378,12 @@ kubectl top pods
 
 ```bash
 # Test dispatcher connectivity
-kubectl port-forward svc/dispatcher 8080:8080
-curl http://localhost:8080/
+minikube service dispatcher
+```
 
-# Test from inside cluster
-kubectl run debug --image=busybox -it --rm -- sh
-wget -qO- http://dispatcher:8080/health
+```bash
+# Test inference connectivity
+minikube service ml-inference
 ```
 
 ## 📋 Performance Benchmarks
@@ -410,6 +403,54 @@ wget -qO- http://dispatcher:8080/health
 3. **Sustained Load**: 30 RPS for 10 minutes
 4. **Peak Hours**: Variable load from workload.txt
 
-## 📝 License
+### Results
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+#### HPA 70% CPU Threshold Test Results
+
+![Latency Distribution HPA 70](latency_distribution_70.png)
+
+```
+=== LOAD TEST RESULTS for HPA 70 ===
+Total Requests: 1000
+Successful Requests: 958
+Failed Requests: 42
+Success Rate: ~96.00%
+Failure Rate: ~4.00%
+========================
+Average Latency: 129.29 ms
+Min Latency: 52 ms
+Max Latency: 364 ms
+99th Percentile: 283 ms
+```
+
+- **Latency**: Consistent response times under normal load
+- **96% Success Rate**: System likely maintains reliability under load
+- **Autoscaling Behavior**: System successfully scales from 1 to 5 pods based on CPU utilization
+- **Queue Processing**: Dispatcher maintains stable 2-3 items/second processing rate
+- **Latency Range**: 42ms (best case) to 511ms (worst case during scaling)
+
+#### HPA 90% CPU Threshold Test Results
+
+![Latency Distribution HPA 90](latency_distribution_90.png)
+
+```
+=== LOAD TEST RESULTS for HPA 90 ===
+Total Requests: 1000
+Successful Requests: 1000
+Failed Requests: 0
+Success Rate: 100.00%
+Failure Rate: 0.00%
+========================
+Average Latency: 129.29 ms
+Min Latency: 42 ms
+Max Latency: 511 ms
+99th Percentile: 346 ms
+```
+
+The performance results show:
+
+- **Latency**: Higher latency spikes during autoscaling events
+- **100% Success Rate**: System maintains reliability under load
+- **Autoscaling Behavior**: System successfully scales from 1 to 4 pods based on CPU utilization
+- **Queue Processing**: Dispatcher maintains stable 2-3 items/second processing rate
+- **Latency Range**: 42ms (best case) to 511ms (worst case during scaling)

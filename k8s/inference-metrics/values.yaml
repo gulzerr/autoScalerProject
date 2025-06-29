@@ -19,7 +19,7 @@ grafana:
       datasources:
         - name: Loki
           type: loki
-          url: http://loki-stack:3100
+          url: http://inference-metrics-loki:3100
           access: proxy
           isDefault: false
 
@@ -35,7 +35,7 @@ loki-stack:
     enabled: true
     config:
       clients:
-        - url: http://loki-stack:3100/loki/api/v1/push
+        - url: http://inference-metrics-loki:3100/loki/api/v1/push
   grafana:
     enabled: false # We're already using our own Grafana
   prometheus:
