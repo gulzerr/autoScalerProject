@@ -19,7 +19,12 @@ spec:
         prometheus.io/port: "9999"
     spec:
       containers:
-        - image: gulzerr/ml-inference
+        - image: gulzerr/ml-inference:latest
+          imagePullPolicy: Always
           name: ml-inference
           ports:
             - containerPort: 9999
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "200m"

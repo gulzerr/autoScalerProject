@@ -1,15 +1,43 @@
 {
-  "name": "load_tester",
+  "name": "websocket-load-tester",
   "version": "1.0.0",
-  "main": "index.js",
-  "license": "MIT",
+  "description": "WebSocket Load Tester for ML Dispatcher",
+  "main": "dist/websocket-tester.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/websocket-tester.js",
+    "dev": "npx ts-node src/index.ts",
+    "load-test": "ts-node src/loadTester.ts",
+    "workload-test": "ts-node src/workloadLoadTester.ts",
+    "clean": "rm -rf dist",
+    "prebuild": "npm run clean"
+  },
   "dependencies": {
-    "@types/node": "^22.15.21",
-    "axios": "^1.9.0",
-    "canvas": "^3.1.0",
-    "chart.js": "^4.4.9",
+    "@types/chartjs-plugin-annotation": "^1.0.0",
+    "@types/cors": "^2.8.19",
+    "axios": "^1.6.0",
+    "body-parser": "^2.2.0",
+    "chart.js": "^4.5.0",
     "chartjs-node-canvas": "^5.0.0",
-    "chartjs-plugin-annotation": "^3.1.0",
-    "sharp": "^0.34.2"
-  }
+    "cors": "^2.8.5",
+    "morgan-body": "^2.6.9",
+    "node-cache": "^5.1.2",
+    "sharp": "^0.34.2",
+    "ultimate-express": "^2.0.6"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/ws": "^8.5.10",
+    "ts-node": "^10.9.1",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.3.2"
+  },
+  "keywords": [
+    "load-testing",
+    "websocket",
+    "ml",
+    "typescript"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
 }

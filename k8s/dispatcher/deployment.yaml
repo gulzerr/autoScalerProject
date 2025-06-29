@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: dispatcher
+  name: dispatcher
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dispatcher
+  template:
+    metadata:
+      labels:
+        app: dispatcher
+    spec:
+      containers:
+        - image: gulzerr/dispatcher:latest
+          imagePullPolicy: Always
+          name: dispatcher
+          ports:
+            - containerPort: 3002
+          env:
+            # ML Inference service URL
+            - name: ML_INFERENCE_URL
+              value: "http://ml-inference:9999/infer"
+            # Local load tester URL (if needed)
+            - name: LOCAL_API_URL
+              value: "http://host.minikube.internal:3003"
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"

@@ -1,176 +1,415 @@
-# Scalable ML Inference with Kubernetes
+# ML Inference Autoscaling System
 
-This project implements a scalable machine learning inference system using ResNet50 for image classification. The system is designed to automatically scale based on load using Kubernetes and includes comprehensive monitoring and logging capabilities.
+A Kubernetes-based machine learning inference system with automatic scaling capabilities, designed to handle variable workloads efficiently using HPA (Horizontal Pod Autoscaler) and comprehensive load testing.
 
-## Architecture Overview
-
-- **ML Inference Service**: FastAPI-based server that hosts the ResNet50 model for image classification
-- **Kubernetes Autoscaling**: Automatic scaling of inference pods based on CPU usage using KEDA
-- **Load Testing**: Node.js-based load testing tool to simulate high traffic
-- **Monitoring**: Prometheus for metrics collection and Grafana for visualization
-- **Logging**: Loki for centralized log collection and analysis
-- **Package Management**: Helm charts for easy deployment and configuration
-
-## Project Structure
+## 🏗️ System Architecture
 
 ```
-.
-├── ml-inference/               # ML inference service
-│   ├── Dockerfile             # Container definition for the inference service
-│   ├── requirements.txt       # Python dependencies
-│   └── src/
-│       ├── model_server_fastapi.py  # FastAPI server with ResNet50 model
-│       └── metrics.py         # Prometheus metrics integration
-├── k8s/                       # Kubernetes configuration
-│   └── inference-metrics/     # Helm chart for deployment
-│       ├── Chart.yaml         # Chart definition and dependencies
-│       ├── values.yaml        # Configuration values
-│       └── templates/         # Kubernetes resource templates
-│           ├── deployment.yaml    # Pod deployment configuration
-│           ├── service.yaml       # Service definition
-│           └── scaledobject.yaml  # KEDA autoscaling configuration
-└── load_tester/               # Load testing tools
-    ├── package.json           # Node.js dependencies
-    └── artillery-config.yaml  # Artillery load testing configuration
+┌────────────────────────────────────────────────────────────────────────┐
+│                          Load Testing Environment                      │
+│  ┌─────────────────┐    ┌──────────────────┐    ┌──────────────────┐   │
+│  │   workload.txt  │───▶│  Load Tester     │───▶│   Image Pool     │   │
+│  │   (req/second)  │    │   Server         │    │   (base64)       │   │
+│  └─────────────────┘    └──────────────────┘    └──────────────────┘   │
+└────────────────────────────────────────────────────────────────────────┘
+                                    │
+                            HTTP API calls
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│                        Kubernetes Cluster                              │
+│                                                                        │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │                      Dispatcher Service                         │   │
+│  │  ┌────────────────┐  ┌─────────────────┐  ┌─────────────────┐   │   │
+│  │  │    Worker 1    │  │    Worker 2     │  │    Worker 3     │   │   │
+│  │  └────────────────┘  └─────────────────┘  └─────────────────┘   │   │
+│  │  ┌────────────────────────────────────────────────────────────┐ │   │
+│  │  │               Queue (Array)                                │ │   │
+│  │  │           [base64_img1, base64_img2, ...]                  │ │   │
+│  │  └────────────────────────────────────────────────────────────┘ │   │
+│  │  ┌────────────────────────────────────────────────────────────┐ │   │
+│  │  │         Cron Job (2 items/second)                          │ │   │
+│  │  └────────────────────────────────────────────────────────────┘ │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                    │                                   │
+│                            HTTP calls (2/sec)                          │
+│                                    ▼                                   │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │                 ML Inference Service                            │   │
+│  │                 (Auto-scaling: 1-5 pods)                        │   │
+│  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌──────────┐   │   │
+│  │  │   Pod 1     │ │   Pod 2     │ │   Pod 3     │ │   ...    │   │   │
+│  │  │(FastAPI+UV) │ │(FastAPI+UV) │ │(FastAPI+UV) │ │          │   │   │
+│  │  └─────────────┘ └─────────────┘ └─────────────┘ └──────────┘   │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                    │                                   │
+│                          Results + Latency                             │
+│                                    ▼                                   │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │                Monitoring Stack                                 │   │
+│  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌──────────┐   │   │
+│  │  │ Prometheus  │ │  Grafana    │ │   Loki      │ │   HPA    │   │   │
+│  │  └─────────────┘ └─────────────┘ └─────────────┘ └──────────┘   │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
-## Requirements
+## 🎯 Key Components
 
-### For Local Development
+### 1. Load Tester Server (External)
 
-- Python 3.10+
-- Node.js 16+
-- Docker
+- **Location**: Outside Kubernetes cluster
+- **Purpose**: Orchestrates load testing and collects performance metrics
+- **Language**: Node.js/TypeScript
+- **Key Features**:
+  - Processes `workload.txt` to determine request patterns
+  - Converts images to base64
+  - Calls dispatcher's enqueue API
+  - Stores latency measurements
+  - Generates performance reports with plots
+
+### 2. Dispatcher Service (Inside Kubernetes)
+
+- **Architecture**: 3 workers + 1 server (cluster mode)
+- **Purpose**: Request queuing and rate limiting
+- **Language**: Node.js/TypeScript
+- **Key Features**:
+  - `/enqueue` API: Accepts base64 images and queues them
+  - Internal queue (array-based)
+  - Cron job: Processes 2 items/second from queue
+  - Calls ML inference service
+  - Reports latency back to load tester
+
+### 3. ML Inference Service (Inside Kubernetes)
+
+- **Purpose**: Machine learning model inference
+- **Technology**: FastAPI + Uvicorn
+- **Scaling**: HPA-based autoscaling (1-5 pods)
+- **Triggers**: CPU utilization > 70%
+
+### 4. Monitoring Stack
+
+- **Prometheus**: Metrics collection
+- **Grafana**: Visualization dashboard
+- **Loki**: Log aggregation
+- **HPA**: Horizontal Pod Autoscaler
+
+## 🚀 Setup Instructions
+
+### Prerequisites
+
+- Docker Desktop
+- Minikube
 - kubectl
-- Helm 3
+- Helm 3.x
+- Node.js 18+
+- Python 3.9+
 
-### For Kubernetes Deployment
-
-- Kubernetes cluster (minikube, kind, or cloud provider)
-- KEDA installed on the cluster
-- Helm 3
-
-## Setup and Installation
-
-### 1. Build and Run the ML Inference Service Locally
+### 1. Minikube Setup
 
 ```bash
-# Navigate to the ml-inference directory
-cd ml-inference
+# Start Minikube with sufficient resources
+minikube start --memory=8192 --cpus=4
 
-# Install Python dependencies
-pip install -r requirements.txt
+# Enable metrics-server for HPA
+minikube addons enable metrics-server
 
-# Run the FastAPI server
-python src/model_server_fastapi.py
+# Update kubeconfig context
+minikube update-context
 ```
 
-The server will be available at http://localhost:9999 with API documentation at http://localhost:9999/docs
-
-### 2. Build and Push the Docker Image
+### 2. Build and Load Docker Images
 
 ```bash
-# Build the Docker image
-docker build -t your-registry/ml-inference:latest ./ml-inference
+# Build dispatcher image
+cd dispatcher
+docker build -t dispatcher:latest .
 
-# Push to your container registry
-docker push your-registry/ml-inference:latest
+# Build ML inference image
+cd ../ml-inference
+docker build -t ml-inference:latest .
+
+# Load images into Minikube
+minikube image load dispatcher:latest
+minikube image load ml-inference:latest
 ```
 
-### 3. Deploy to Kubernetes using Helm
+### 3. Deploy Monitoring Stack
 
 ```bash
-# Add required Helm repositories
+cd k8s/inference-metrics
+
+# Add Helm repositories
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm repo add grafana https://grafana.github.io/helm-charts
 helm repo add kedacore https://kedacore.github.io/charts
 helm repo update
 
-# Deploy the application
-helm install inference-metrics ./k8s/inference-metrics
+# Update dependencies
+helm dependency update
+
+# Install monitoring stack
+helm install inference-metrics . --values values.yaml
 ```
 
-### 4. Run Load Tests
+### 4. Deploy Application Services
 
 ```bash
-# Navigate to the load_tester directory
-cd load_tester
+# Deploy dispatcher
+kubectl apply -f k8s/dispatcher/
 
-# Install Node.js dependencies
-npm install
-
-# Run Artillery load tests
-npx artillery run artillery-config.yaml
+# Deploy ML inference service with HPA
+kubectl apply -f k8s/inference-metrics/templates/deployment.yaml
+kubectl apply -f k8s/inference-metrics/templates/service.yaml
+kubectl apply -f k8s/inference-metrics/templates/hpa.yaml
 ```
 
-## Monitoring and Observability
+### 5. Verify Deployment
 
-### Prometheus Metrics
+```bash
+# Check all pods are running
+kubectl get pods
 
-The ML inference service exposes the following metrics at `/metrics`:
+# Verify HPA is working
+kubectl get hpa -o wide
 
-- `inference_requests_total`: Total number of inference requests
-- `inference_exceptions_total`: Total number of inference exceptions
-- `inference_latency_seconds`: Histogram of inference request latency
+# Check services
+kubectl get svc
+```
+
+## 🧪 Load Testing Workflow
+
+### 1. Prepare Test Data
+
+**Create `workload.txt`:**
+
+```
+10,15,20,25,30,25,20,15,10,5
+```
+
+_Format: requests per second, comma-separated_
+
+**Image Pool:**
+
+- Place test images in `load_tester/images/`
+- Images will be automatically converted to base64
+
+### 2. Start Load Tester Server
+
+```bash
+cd load_tester
+yarn install
+yarn dev
+```
+
+### 3. Trigger Load Test
+
+```bash
+# Custom test with specific parameters
+curl -X POST http://localhost:3003/runLoadTest \
+  -H "Content-Type: application/json" \
+  -d '{
+    "maxImages": 1000
+  }'
+```
+
+### 4. Monitor Autoscaling
+
+```bash
+# Watch HPA in real-time
+watch kubectl get hpa
+
+# Monitor pod scaling
+watch kubectl get pods -l app=ml-inference
+
+# Check CPU usage
+kubectl top pods
+```
+
+### 5. Generate Performance Report
+
+```bash
+# Generate report with actual request count
+curl -X POST http://localhost:3000/generateReport \
+  -H "Content-Type: application/json" \
+  -d '{"totalRequests": 1000}'
+```
+
+## 📊 Test Flow Details
+
+### Step-by-Step Process
+
+1. **Test Initialization**
+
+   - Load tester reads `workload.txt`
+   - Converts all images in `/images/` to base64
+   - Prepares request schedule
+
+2. **Request Generation**
+
+   - For each second in workload pattern:
+     - Send N requests to dispatcher's `/enqueue` API
+     - Each request contains a base64 image
+
+3. **Dispatcher Processing**
+
+   - Queues incoming base64 images in array
+   - Cron job processes 2 items/second
+   - Calls ML inference service for each item
+   - Measures latency for each request
+
+4. **ML Inference**
+
+   - Processes images using ML model
+   - Returns classification results
+   - CPU usage triggers autoscaling when busy
+
+5. **Latency Reporting**
+
+   - Dispatcher calls load tester's `/storeLatency` API
+   - Latencies stored in cache array
+
+6. **Report Generation**
+   - Call `/generateReport` with actual request count
+   - System generates:
+     - Latency distribution plot
+     - Success/failure statistics
+     - Performance metrics
+
+## 🔧 API Endpoints
+
+### Load Tester APIs
+
+```
+POST /runLoadTest           # Start workload-based test
+POST /storeLatency          # Store latency measurement
+POST /generateReport        # Generate performance report
+```
+
+### Dispatcher APIs
+
+```
+POST /enqueue               # Queue image for processing
+```
+
+### ML Inference APIs
+
+```
+POST /infer               # Image classification
+GET  /metrics               # Prometheus metrics
+```
+
+## 📈 Monitoring and Observability
 
 ### Accessing Dashboards
 
-After deployment, access the dashboards:
+**Grafana Dashboard:**
 
-- **Grafana**: For visualization of metrics
+```bash
+kubectl port-forward svc/inference-metrics-grafana 3000:80
+# Access: http://localhost:3000
+# Credentials: admin/admin
+```
 
-  ```bash
-  kubectl port-forward svc/inference-metrics-grafana 3000:80
-  ```
+**Prometheus:**
 
-  Access at http://localhost:3000 (default credentials: admin/prom-operator)
+```bash
+kubectl port-forward svc/inference-metrics-prometheus-server 9090:80
+# Access: http://localhost:9090
+```
 
-- **Prometheus**: For raw metrics and queries
-  ```bash
-  kubectl port-forward svc/inference-metrics-prometheus-server 9090:80
-  ```
-  Access at http://localhost:9090
+### Key Metrics to Monitor
 
-## Autoscaling Configuration
+- **CPU Utilization**: Target > 70% triggers scaling
+- **Request Latency**: End-to-end response times
+- **Queue Length**: Dispatcher queue size
+- **Pod Count**: Number of active inference pods
+- **Success Rate**: Percentage of successful requests
 
-The system uses KEDA for autoscaling based on Prometheus metrics. The configuration in `scaledobject.yaml` defines:
+## 🎛️ Configuration
 
-- Minimum replicas: 1
-- Maximum replicas: 5
-- Scaling metric: CPU usage (threshold: 50%)
-- Polling interval: 15 seconds
+### HPA Configuration
 
-## Performance Considerations
+```yaml
+# Current settings in hpa.yaml
+minReplicas: 1
+maxReplicas: 5
+targetCPUUtilization: 70%
+scaleUpBehavior: 30s stabilization
+scaleDownBehavior: 60s stabilization
+```
 
-- The ML inference service is configured to use limited CPU resources (1 thread) to simulate deployment constraints
-- Both client and server code include timing measurements to evaluate performance
-- The ResNet50 model is pre-loaded at startup to minimize inference latency
+### Dispatcher Configuration
 
-## Troubleshooting
+```typescript
+// Worker configuration
+workers: 3
+server: 1 (cluster mode)
+cronFrequency: 2 items/second
+queueType: Array (in-memory)
+```
+
+### Load Tester Configuration
+
+```typescript
+// Default settings
+imageFormats: [".JPEG", ".jpg", ".png"];
+reportFormat: "PNG plot + JSON stats";
+```
+
+## 🐛 Troubleshooting
 
 ### Common Issues
 
-1. **Pod scaling not working**:
+**HPA showing 0% CPU:**
 
-   - Verify KEDA is properly installed
-   - Check Prometheus metrics are being collected
-   - Examine KEDA logs: `kubectl logs -n keda -l app=keda-operator`
+```bash
+# Verify metrics-server is running
+kubectl get pods -n kube-system | grep metrics-server
 
-2. **High inference latency**:
+# Check resource requests are set
+kubectl describe deployment ml-inference
+```
 
-   - Check resource allocation for pods
-   - Verify node capacity in the cluster
-   - Consider using GPU-accelerated nodes for inference
+**Pods not scaling:**
 
-3. **Monitoring not showing data**:
-   - Ensure Prometheus can scrape the `/metrics` endpoint
-   - Check service annotations for Prometheus discovery
-   - Verify Grafana datasource configuration
+```bash
+# Check HPA status
+kubectl describe hpa ml-inference-hpa
 
-## Future Improvements
+# Verify CPU load
+kubectl top pods
+```
 
-- Add GPU support for faster inference
-- Implement model versioning and A/B testing
-- Add distributed tracing with Jaeger or Zipkin
-- Implement canary deployments for safe model updates
-- Add authentication and authorization for the API
+**Service connectivity issues:**
+
+```bash
+# Test dispatcher connectivity
+kubectl port-forward svc/dispatcher 8080:8080
+curl http://localhost:8080/
+
+# Test from inside cluster
+kubectl run debug --image=busybox -it --rm -- sh
+wget -qO- http://dispatcher:8080/health
+```
+
+## 📋 Performance Benchmarks
+
+### Expected Performance
+
+- **Baseline**: 1 pod handles ~10 RPS
+- **Scale-up trigger**: CPU > 70%
+- **Scale-up time**: ~30 seconds
+- **Scale-down time**: ~60 seconds
+- **Max throughput**: ~50 RPS (5 pods)
+
+### Test Scenarios
+
+1. **Gradual Ramp**: 5→10→15→20→25 RPS
+2. **Spike Test**: 0→50 RPS instantly
+3. **Sustained Load**: 30 RPS for 10 minutes
+4. **Peak Hours**: Variable load from workload.txt
+
+## 📝 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.

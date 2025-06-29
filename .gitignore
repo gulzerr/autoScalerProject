@@ -1,4 +1,11 @@
 load_tester/node_modules
+load_tester/images
+
 dispatcher/node_modules
-backend-inference/src/__pycache__
+
+ml-inference/src/__pycache__
+
+k8s/inference-metrics/Chart.lock
+k8s/inference-metrics/charts
+
 .DS_Store

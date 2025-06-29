@@ -5,11 +5,8 @@ dependencies:
 - name: grafana
   repository: https://grafana.github.io/helm-charts
   version: 9.2.2
-- name: keda
-  repository: https://kedacore.github.io/charts
-  version: 2.17.0
 - name: loki-stack
   repository: https://grafana.github.io/helm-charts
   version: 2.9.11
-digest: sha256:55de046b88da047012c80e8fc63a77e590af7365f2133c62a97038b3061c807c
-generated: "2025-06-09T21:44:13.265387+02:00"
+digest: sha256:e44f617d7046e8e73874da9f6827ea6b6fc4ca6b8442ec6fb501e78d24dadd71
+generated: "2025-06-29T12:35:52.996243+02:00"

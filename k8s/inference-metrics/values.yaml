@@ -3,15 +3,15 @@ prometheus:
     enabled: false
 
   pushgateway:
-    enabled: false
+    enabled: true
 
   nodeExporter:
-    enabled: false
+    enabled: true
 
 grafana:
   service:
     type: NodePort
-  
+
   # Add Loki as a datasource
   datasources:
     datasources.yaml:
@@ -19,13 +19,11 @@ grafana:
       datasources:
         - name: Loki
           type: loki
-          url: http://inference-metrics-loki:3100
+          url: http://loki-stack:3100
           access: proxy
           isDefault: false
 
-keda:
-  crds:
-    install: false
+# KEDA is installed separately in keda namespace
 
 # Loki-stack configuration
 loki-stack:
@@ -37,8 +35,8 @@ loki-stack:
     enabled: true
     config:
       clients:
-        - url: http://inference-metrics-loki:3100/loki/api/v1/push
+        - url: http://loki-stack:3100/loki/api/v1/push
   grafana:
-    enabled: false  # We're already using our own Grafana
+    enabled: false # We're already using our own Grafana
   prometheus:
-    enabled: false  # We're already using our own Prometheus
+    enabled: false # We're already using our own Prometheus
